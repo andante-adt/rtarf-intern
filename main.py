@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from typing import Optional
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 import httpx
 import json
 import re
@@ -14,28 +13,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 
+import database as db
+
 logger = logging.getLogger("rtarf-soc")
 
 # ── Scheduler setup ──────────────────────────────────────────────
 ICT = pytz.timezone("Asia/Bangkok")
 scheduler = AsyncIOScheduler(timezone=ICT)
-
-# ── Persistent alert store (alert_store.json) ────────────────────
-STORE_FILE = Path("alert_store.json")
-alert_store: dict = {}
-
-def _load_store() -> dict:
-    if STORE_FILE.exists():
-        try:
-            with open(STORE_FILE, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
-
-def _save_store():
-    with open(STORE_FILE, "w", encoding="utf-8") as f:
-        json.dump(alert_store, f, ensure_ascii=False, indent=2)
 
 # ── In-memory store สะสม alert ที่วิเคราะห์แล้วในแต่ละวัน ──────
 daily_alerts: list = []
@@ -66,9 +50,9 @@ async def daily_report_job():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load persistent store
-    alert_store.update(_load_store())
-    logger.info(f"[Store] Loaded {len(alert_store)} alert records")
+    db.init_db()
+    db.migrate_from_json()
+    logger.info("[DB] Ready")
 
     scheduler.add_job(
         daily_report_job,
@@ -177,11 +161,20 @@ async def ask_llm(prompt: str) -> str:
         return response.json()["response"]
 
 
+_MITRE_KEYS = ("mitre_tactic", "mitre_technique")
+
 async def _ensure_thai(normalized: dict) -> dict:
     for attempt in range(3):
-        if not any(_has_chinese(str(v)) for v in normalized.values()):
-            return normalized
+        non_mitre_chinese = any(
+            _has_chinese(str(v))
+            for k, v in normalized.items()
+            if k not in _MITRE_KEYS
+        )
+        if not non_mitre_chinese:
+            break
         logger.warning(f"[LLM] Chinese detected (attempt {attempt + 1}/3) — re-translating to Thai")
+        mitre_tactic    = normalized.get("mitre_tactic",    "-")
+        mitre_technique = normalized.get("mitre_technique", "-")
         prompt = (
             "You are a professional translator. Your task:\n"
             "1. Read the JSON below.\n"
@@ -196,7 +189,9 @@ async def _ensure_thai(normalized: dict) -> dict:
         analysis2 = extract_json(result)
         if "raw_response" not in analysis2:
             normalized = normalize_analysis(analysis2)
-    if any(_has_chinese(str(v)) for v in normalized.values()):
+            normalized["mitre_tactic"]    = mitre_tactic
+            normalized["mitre_technique"] = mitre_technique
+    if any(_has_chinese(str(v)) for k, v in normalized.items() if k not in _MITRE_KEYS):
         logger.error("[LLM] Chinese still present after 3 translation attempts")
     return normalized
 
@@ -227,12 +222,12 @@ def scheduler_status():
 @app.get("/alerts")
 def get_alerts():
     """ดึง state ของทุก alert (status + analysis)"""
-    return alert_store
+    return db.get_all_alerts()
 
 @app.get("/alerts/{alert_id}/analysis")
 def get_alert_analysis(alert_id: str):
     """ดึง cached analysis และ status ของ alert"""
-    entry = alert_store.get(alert_id)
+    entry = db.get_alert(alert_id)
     if not entry:
         return {"status": "OPEN", "analysis": None}
     return {
@@ -241,27 +236,28 @@ def get_alert_analysis(alert_id: str):
         "analyzed_at": entry.get("analyzed_at"),
     }
 
+@app.get("/alerts/{alert_id}/audit")
+def get_alert_audit(alert_id: str):
+    """ดึง audit log ของ alert"""
+    return db.get_audit_log(alert_id)
+
 @app.post("/alerts/{alert_id}/status")
 def update_alert_status(alert_id: str, body: StatusUpdate):
     """อัปเดต status ของ alert (OPEN / ACKNOWLEDGED / CLOSED)"""
     valid = {"OPEN", "ACKNOWLEDGED", "CLOSED"}
     if body.status not in valid:
         raise HTTPException(status_code=400, detail=f"status must be one of {valid}")
-    if alert_id not in alert_store:
-        alert_store[alert_id] = {}
-    alert_store[alert_id]["status"] = body.status
-    alert_store[alert_id]["status_updated_at"] = datetime.now(timezone.utc).isoformat()
-    _save_store()
+    db.update_status(alert_id, body.status, actor="analyst")
     return {"ok": True, "alert_id": alert_id, "status": body.status}
 
 
 # ── LLM prompts ───────────────────────────────────────────────────
 PROMPT_RULES = """
 กฎบังคับ (ห้ามละเมิด):
-1. mitre_tactic ต้องเป็น string เท่านั้น เช่น Credential Access ห้ามเป็น array
-2. mitre_technique ต้องเป็น string เท่านั้น เช่น T1110 ห้ามเป็น array
+1. mitre_tactic ต้องเป็น string ภาษาอังกฤษเท่านั้น เช่น Credential Access, Lateral Movement ห้ามเป็น array หรือภาษาอื่น
+2. mitre_technique ต้องเป็น string ภาษาอังกฤษเท่านั้น เช่น T1110, T1078 ห้ามเป็น array หรือภาษาอื่น
 3. verdict ต้องเป็น True Positive หรือ False Positive เท่านั้น
-4. ตอบทุก field ใน JSON เป็นภาษาไทยเท่านั้น ห้ามใช้ภาษาจีนหรือภาษาอื่น"""
+4. ตอบ field summary, reason, recommended_action, playbook_steps เป็นภาษาไทยเท่านั้น ห้ามใช้ภาษาจีนหรือภาษาอื่น"""
 
 PROMPT_TEMPLATE = """{
   "summary": "สรุปสั้นๆ ว่าเกิดอะไรขึ้น",
@@ -362,13 +358,9 @@ async def analyze_full(alert: Alert):
     normalized = normalize_analysis(analysis) if "raw_response" not in analysis else analysis
     normalized = await _ensure_thai(normalized)
 
-    # บันทึกลง persistent store
-    alert_store[alert.id] = {
-        "status":      alert_store.get(alert.id, {}).get("status", "OPEN"),
-        "analysis":    normalized,
-        "analyzed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _save_store()
+    analyzed_at = datetime.now(timezone.utc).isoformat()
+    db.save_analysis(alert.id, normalized, analyzed_at)
+    db.add_audit_log(alert.id, "ANALYZED", detail=f"verdict={normalized.get('verdict', '-')}")
 
     if "raw_response" not in normalized:
         _collect_alert(alert, normalized)
