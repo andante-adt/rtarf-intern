@@ -1,5 +1,5 @@
 # main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 import database as db
+from auth import authenticate_user, create_access_token, get_current_user
 
 logger = logging.getLogger("rtarf-soc")
 
@@ -86,6 +87,10 @@ class Alert(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str  # OPEN | ACKNOWLEDGED | CLOSED
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "qwen2.5:14b"
@@ -202,12 +207,12 @@ def root():
     return {"status": "RTARF AI-SOC running"}
 
 @app.post("/trigger-report")
-async def trigger_report():
+async def trigger_report(current_user: str = Depends(get_current_user)):
     await daily_report_job()
     return {"status": "Report job executed"}
 
 @app.get("/scheduler-status")
-def scheduler_status():
+def scheduler_status(current_user: str = Depends(get_current_user)):
     job = scheduler.get_job("daily_report")
     if job:
         return {
@@ -218,15 +223,26 @@ def scheduler_status():
     return {"status": "job not found"}
 
 
+# ── Auth endpoints ────────────────────────────────────────────────
+@app.post("/auth/login")
+def login(body: LoginRequest):
+    if not authenticate_user(body.username, body.password):
+        raise HTTPException(status_code=401, detail="username หรือ password ไม่ถูกต้อง")
+    token = create_access_token(body.username)
+    return {"access_token": token, "token_type": "bearer"}
+
+@app.get("/auth/me")
+def me(current_user: str = Depends(get_current_user)):
+    return {"username": current_user}
+
+
 # ── Alert store endpoints ─────────────────────────────────────────
 @app.get("/alerts")
-def get_alerts():
-    """ดึง state ของทุก alert (status + analysis)"""
+def get_alerts(current_user: str = Depends(get_current_user)):
     return db.get_all_alerts()
 
 @app.get("/alerts/{alert_id}/analysis")
-def get_alert_analysis(alert_id: str):
-    """ดึง cached analysis และ status ของ alert"""
+def get_alert_analysis(alert_id: str, current_user: str = Depends(get_current_user)):
     entry = db.get_alert(alert_id)
     if not entry:
         return {"status": "OPEN", "analysis": None}
@@ -237,17 +253,15 @@ def get_alert_analysis(alert_id: str):
     }
 
 @app.get("/alerts/{alert_id}/audit")
-def get_alert_audit(alert_id: str):
-    """ดึง audit log ของ alert"""
+def get_alert_audit(alert_id: str, current_user: str = Depends(get_current_user)):
     return db.get_audit_log(alert_id)
 
 @app.post("/alerts/{alert_id}/status")
-def update_alert_status(alert_id: str, body: StatusUpdate):
-    """อัปเดต status ของ alert (OPEN / ACKNOWLEDGED / CLOSED)"""
+def update_alert_status(alert_id: str, body: StatusUpdate, current_user: str = Depends(get_current_user)):
     valid = {"OPEN", "ACKNOWLEDGED", "CLOSED"}
     if body.status not in valid:
         raise HTTPException(status_code=400, detail=f"status must be one of {valid}")
-    db.update_status(alert_id, body.status, actor="analyst")
+    db.update_status(alert_id, body.status, actor=current_user)
     return {"ok": True, "alert_id": alert_id, "status": body.status}
 
 
@@ -335,7 +349,7 @@ def get_playbook_steps_safe(query: str, n_results: int = 3) -> str:
 
 
 @app.post("/analyze-full")
-async def analyze_full(alert: Alert):
+async def analyze_full(alert: Alert, current_user: str = Depends(get_current_user)):
     query = f"{alert.category} {alert.name} {alert.description}"
     playbook_context = get_playbook_steps_safe(query)
 
