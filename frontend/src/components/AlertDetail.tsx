@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { Alert, AnalysisResult, AlertStatus } from '../types'
-import { analyzeAlert, getAlertState, updateAlertStatus } from '../api'
+import type { Alert, AnalysisResult, AlertStatus, AuditEntry } from '../types'
+import { analyzeAlert, getAlertState, updateAlertStatus, getAuditLog } from '../api'
 
 const SEV_BORDER: Record<string, string> = {
   Critical: '#ef4444',
@@ -33,6 +33,19 @@ function sanitizeMitre(val?: string | null): string {
   return v
 }
 
+function formatTimestamp(ts: string): string {
+  try {
+    return new Date(ts).toLocaleString('th-TH', {
+      timeZone: 'Asia/Bangkok',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    })
+  } catch {
+    return ts
+  }
+}
+
 interface Props {
   alert: Alert
   initialStatus: AlertStatus
@@ -40,21 +53,25 @@ interface Props {
 }
 
 export default function AlertDetail({ alert, initialStatus, onStatusChange }: Props) {
-  const [loading,  setLoading]  = useState(false)
-  const [result,   setResult]   = useState<AnalysisResult | null>(null)
-  const [error,    setError]    = useState<string | null>(null)
-  const [status,   setStatus]   = useState<AlertStatus>(initialStatus)
+  const [loading,    setLoading]    = useState(false)
+  const [result,     setResult]     = useState<AnalysisResult | null>(null)
+  const [error,      setError]      = useState<string | null>(null)
+  const [status,     setStatus]     = useState<AlertStatus>(initialStatus)
   const [actLoading, setActLoading] = useState(false)
+  const [auditLog,   setAuditLog]   = useState<AuditEntry[]>([])
 
-  // โหลด cached analysis เมื่อ switch alert
+  const refreshAudit = () => getAuditLog(alert.id).then(setAuditLog)
+
   useEffect(() => {
     setStatus(initialStatus)
     setResult(null)
     setError(null)
+    setAuditLog([])
     getAlertState(alert.id).then(state => {
       if (state.analysis) setResult(state.analysis)
       if (state.status)   setStatus(state.status)
     })
+    refreshAudit()
   }, [alert.id, initialStatus])
 
   const handleAnalyze = async () => {
@@ -63,6 +80,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
     setError(null)
     try {
       setResult(await analyzeAlert(alert))
+      await refreshAudit()
     } catch (e) {
       setError(String(e))
     } finally {
@@ -76,6 +94,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
       await updateAlertStatus(alert.id, newStatus)
       setStatus(newStatus)
       onStatusChange(alert.id, newStatus)
+      await refreshAudit()
     } finally {
       setActLoading(false)
     }
@@ -164,6 +183,66 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
       )}
 
       {result && <AnalysisResults result={result} />}
+
+      {/* Audit Log */}
+      {auditLog.length > 0 && (
+        <>
+          <div className="border-t border-[#1e2d3d] my-4" />
+          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-3">
+            Audit Log
+          </div>
+          <div className="flex flex-col gap-0">
+            {[...auditLog].reverse().map((entry, i) => (
+              <AuditRow key={entry.id} entry={entry} isLast={i === auditLog.length - 1} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function AuditRow({ entry, isLast }: { entry: AuditEntry; isLast: boolean }) {
+  const isStatus   = entry.action === 'STATUS_CHANGED'
+  const isAnalyzed = entry.action === 'ANALYZED'
+
+  const dotColor = isAnalyzed ? '#3b82f6'
+    : entry.detail?.includes('CLOSED') ? '#22c55e'
+    : entry.detail?.includes('ACKNOWLEDGED') ? '#f59e0b'
+    : '#64748b'
+
+  const actionLabel = isAnalyzed ? 'วิเคราะห์แล้ว'
+    : isStatus ? 'เปลี่ยนสถานะ'
+    : entry.action
+
+  return (
+    <div className="flex gap-3 text-[13px]">
+      {/* Timeline line */}
+      <div className="flex flex-col items-center" style={{ width: 16 }}>
+        <div
+          className="w-2 h-2 rounded-full shrink-0 mt-1"
+          style={{ background: dotColor, boxShadow: `0 0 4px ${dotColor}` }}
+        />
+        {!isLast && <div className="w-px flex-1 bg-[#1e2d3d] mt-1" />}
+      </div>
+
+      {/* Content */}
+      <div className="pb-3 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-[11px] text-[#4a6080]">{actionLabel}</span>
+          {entry.detail && (
+            <span className="font-mono text-[11px] text-[#c9d8e8] bg-[#0d1521] border border-[#1e2d3d] px-2 py-0.5 rounded">
+              {entry.detail}
+            </span>
+          )}
+          <span className="font-mono text-[10px] text-[#2d3f52] ml-auto">
+            {entry.actor}
+          </span>
+        </div>
+        <div className="font-mono text-[10px] text-[#2d3f52] mt-0.5">
+          {formatTimestamp(entry.timestamp)}
+        </div>
+      </div>
     </div>
   )
 }
