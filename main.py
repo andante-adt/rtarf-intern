@@ -92,6 +92,14 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class BlockIPRequest(BaseModel):
+    alert_id: str
+    ip: str
+
+class IsolateHostRequest(BaseModel):
+    alert_id: str
+    hostname: str
+
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "qwen2.5:14b"
 
@@ -264,6 +272,22 @@ def update_alert_status(alert_id: str, body: StatusUpdate, current_user: str = D
     db.update_status(alert_id, body.status, actor=current_user)
     return {"ok": True, "alert_id": alert_id, "status": body.status}
 
+# ── Active Response endpoints ─────────────────────────────────────
+@app.post("/response/block-ip")
+async def response_block_ip(body: BlockIPRequest, current_user: str = Depends(get_current_user)):
+    """Stub — จะเชื่อมต่อ Palo Alto API เมื่อได้ credentials"""
+    detail = f"IP={body.ip} [STUB]"
+    db.add_audit_log(body.alert_id, "BLOCK_IP", actor=current_user, detail=detail)
+    logger.info(f"[Response] BLOCK IP {body.ip} by {current_user} (stub)")
+    return {"ok": True, "action": "block-ip", "ip": body.ip, "stub": True}
+
+@app.post("/response/isolate-host")
+async def response_isolate_host(body: IsolateHostRequest, current_user: str = Depends(get_current_user)):
+    """Stub — จะเชื่อมต่อ Palo Alto API เมื่อได้ credentials"""
+    detail = f"HOST={body.hostname} [STUB]"
+    db.add_audit_log(body.alert_id, "ISOLATE_HOST", actor=current_user, detail=detail)
+    logger.info(f"[Response] ISOLATE HOST {body.hostname} by {current_user} (stub)")
+    return {"ok": True, "action": "isolate-host", "hostname": body.hostname, "stub": True}
 
 # ── LLM prompts ───────────────────────────────────────────────────
 PROMPT_RULES = """

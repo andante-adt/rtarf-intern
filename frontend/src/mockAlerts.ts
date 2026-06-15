@@ -1,6 +1,5 @@
 import type { Alert } from './types'
 
-// Mirror of mock_alerts.py — keep in sync with backend data
 export const MOCK_ALERTS: Alert[] = [
   {
     id: 'alert-001',
@@ -12,6 +11,8 @@ export const MOCK_ALERTS: Alert[] = [
     category: 'Authentication Attack',
     description:
       "Detected 47 failed SSH login attempts from IP 192.168.10.55 targeting user 'admin' within 2 minutes.",
+    source_ip:   '192.168.10.55',
+    target_user: 'admin',
   },
   {
     id: 'alert-002',
@@ -23,6 +24,7 @@ export const MOCK_ALERTS: Alert[] = [
     category: 'Data Exfiltration Risk',
     description:
       'Unauthorized USB mass storage device connected to workstation WS-042 in the secured operations room.',
+    hostname: 'WS-042',
   },
   {
     id: 'alert-003',
@@ -34,5 +36,7 @@ export const MOCK_ALERTS: Alert[] = [
     category: 'Privilege Abuse',
     description:
       "Process 'svchost.exe' attempted to modify SYSTEM-level registry keys outside normal operation hours.",
+    hostname: 'SRV-SYS-01',
+    process:  'svchost.exe',
   },
 ]

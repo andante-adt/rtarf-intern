@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { Alert, AnalysisResult, AlertStatus, AuditEntry } from '../types'
-import { analyzeAlert, getAlertState, updateAlertStatus, getAuditLog } from '../api'
+import { analyzeAlert, getAlertState, updateAlertStatus, getAuditLog, blockIp, isolateHost } from '../api'
 
 const SEV_BORDER: Record<string, string> = {
   Critical: '#ef4444',
@@ -53,12 +53,14 @@ interface Props {
 }
 
 export default function AlertDetail({ alert, initialStatus, onStatusChange }: Props) {
-  const [loading,    setLoading]    = useState(false)
-  const [result,     setResult]     = useState<AnalysisResult | null>(null)
-  const [error,      setError]      = useState<string | null>(null)
-  const [status,     setStatus]     = useState<AlertStatus>(initialStatus)
-  const [actLoading, setActLoading] = useState(false)
-  const [auditLog,   setAuditLog]   = useState<AuditEntry[]>([])
+  const [loading,       setLoading]       = useState(false)
+  const [result,        setResult]        = useState<AnalysisResult | null>(null)
+  const [error,         setError]         = useState<string | null>(null)
+  const [status,        setStatus]        = useState<AlertStatus>(initialStatus)
+  const [actLoading,    setActLoading]    = useState(false)
+  const [auditLog,      setAuditLog]      = useState<AuditEntry[]>([])
+  const [respLoading,   setRespLoading]   = useState<string | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<{ action: string; value: string } | null>(null)
 
   const refreshAudit = () => getAuditLog(alert.id).then(setAuditLog)
 
@@ -67,6 +69,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
     setResult(null)
     setError(null)
     setAuditLog([])
+    setConfirmTarget(null)
     getAlertState(alert.id).then(state => {
       if (state.analysis) setResult(state.analysis)
       if (state.status)   setStatus(state.status)
@@ -100,8 +103,23 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
     }
   }
 
+  const handleResponseAction = async (action: string, value: string) => {
+    setRespLoading(action)
+    setConfirmTarget(null)
+    try {
+      if (action === 'block-ip')       await blockIp(alert.id, value)
+      else if (action === 'isolate-host') await isolateHost(alert.id, value)
+      await refreshAudit()
+    } catch (e) {
+      console.error('[Response]', e)
+    } finally {
+      setRespLoading(null)
+    }
+  }
+
   const badgeCls    = SEV_BADGE_CLS[alert.severity] ?? 'text-slate-400 bg-slate-400/10 border-slate-400/30'
   const borderColor = SEV_BORDER[alert.severity] ?? '#f59e0b'
+  const isTP        = result?.verdict.toLowerCase().includes('true positive') ?? false
 
   return (
     <div>
@@ -184,6 +202,97 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
 
       {result && <AnalysisResults result={result} />}
 
+      {/* ── Active Response ── */}
+      {result && isTP && (alert.source_ip || alert.hostname) && (
+        <>
+          <div className="border-t border-[#1e2d3d] my-4" />
+          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-3">
+            Active Response
+          </div>
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-md px-4 py-2 mb-3 flex items-center gap-2">
+            <span className="text-amber-400 font-mono text-[11px] tracking-wider">⚠ STUB MODE</span>
+            <span className="text-amber-400/60 font-mono text-[11px]">— บันทึก audit log แต่ยังไม่ส่งคำสั่งจริงไปยัง Palo Alto</span>
+          </div>
+          <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-md overflow-hidden">
+
+            {alert.source_ip && (
+              <div className="flex items-center justify-between px-5 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[11px] text-[#4a6080] uppercase tracking-wider w-20">Source IP</span>
+                  <span className="font-mono text-[13px] text-[#e2e8f0]">{alert.source_ip}</span>
+                </div>
+                {confirmTarget?.action === 'block-ip' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] text-amber-400">ยืนยัน?</span>
+                    <button
+                      onClick={() => handleResponseAction('block-ip', alert.source_ip!)}
+                      disabled={!!respLoading}
+                      className="font-mono text-[11px] px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 transition-colors"
+                    >
+                      {respLoading === 'block-ip' ? '...' : 'ยืนยัน'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmTarget(null)}
+                      className="font-mono text-[11px] px-3 py-1 rounded border border-[#1e2d3d] text-[#4a6080] hover:text-[#c9d8e8] transition-colors"
+                    >
+                      ยกเลิก
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmTarget({ action: 'block-ip', value: alert.source_ip! })}
+                    disabled={!!respLoading}
+                    className="font-mono text-[11px] tracking-wider border border-red-500/40 text-red-400 hover:bg-red-400/10 disabled:opacity-40 px-4 py-1.5 rounded transition-colors"
+                  >
+                    BLOCK IP
+                  </button>
+                )}
+              </div>
+            )}
+
+            {alert.source_ip && alert.hostname && (
+              <div className="border-t border-[#111d2c]" />
+            )}
+
+            {alert.hostname && (
+              <div className="flex items-center justify-between px-5 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[11px] text-[#4a6080] uppercase tracking-wider w-20">Hostname</span>
+                  <span className="font-mono text-[13px] text-[#e2e8f0]">{alert.hostname}</span>
+                </div>
+                {confirmTarget?.action === 'isolate-host' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] text-amber-400">ยืนยัน?</span>
+                    <button
+                      onClick={() => handleResponseAction('isolate-host', alert.hostname!)}
+                      disabled={!!respLoading}
+                      className="font-mono text-[11px] px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 transition-colors"
+                    >
+                      {respLoading === 'isolate-host' ? '...' : 'ยืนยัน'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmTarget(null)}
+                      className="font-mono text-[11px] px-3 py-1 rounded border border-[#1e2d3d] text-[#4a6080] hover:text-[#c9d8e8] transition-colors"
+                    >
+                      ยกเลิก
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmTarget({ action: 'isolate-host', value: alert.hostname! })}
+                    disabled={!!respLoading}
+                    className="font-mono text-[11px] tracking-wider border border-orange-500/40 text-orange-400 hover:bg-orange-400/10 disabled:opacity-40 px-4 py-1.5 rounded transition-colors"
+                  >
+                    ISOLATE HOST
+                  </button>
+                )}
+              </div>
+            )}
+
+          </div>
+        </>
+      )}
+
       {/* Audit Log */}
       {auditLog.length > 0 && (
         <>
@@ -205,19 +314,24 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
 function AuditRow({ entry, isLast }: { entry: AuditEntry; isLast: boolean }) {
   const isStatus   = entry.action === 'STATUS_CHANGED'
   const isAnalyzed = entry.action === 'ANALYZED'
+  const isBlockIP  = entry.action === 'BLOCK_IP'
+  const isIsolate  = entry.action === 'ISOLATE_HOST'
 
   const dotColor = isAnalyzed ? '#3b82f6'
-    : entry.detail?.includes('CLOSED') ? '#22c55e'
+    : isBlockIP  ? '#ef4444'
+    : isIsolate  ? '#f97316'
+    : entry.detail?.includes('CLOSED')       ? '#22c55e'
     : entry.detail?.includes('ACKNOWLEDGED') ? '#f59e0b'
     : '#64748b'
 
   const actionLabel = isAnalyzed ? 'วิเคราะห์แล้ว'
-    : isStatus ? 'เปลี่ยนสถานะ'
+    : isStatus  ? 'เปลี่ยนสถานะ'
+    : isBlockIP ? 'Block IP'
+    : isIsolate ? 'Isolate Host'
     : entry.action
 
   return (
     <div className="flex gap-3 text-[13px]">
-      {/* Timeline line */}
       <div className="flex flex-col items-center" style={{ width: 16 }}>
         <div
           className="w-2 h-2 rounded-full shrink-0 mt-1"
@@ -225,8 +339,6 @@ function AuditRow({ entry, isLast }: { entry: AuditEntry; isLast: boolean }) {
         />
         {!isLast && <div className="w-px flex-1 bg-[#1e2d3d] mt-1" />}
       </div>
-
-      {/* Content */}
       <div className="pb-3 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono text-[11px] text-[#4a6080]">{actionLabel}</span>

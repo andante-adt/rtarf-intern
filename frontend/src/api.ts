@@ -95,3 +95,21 @@ export async function getAuditLog(alertId: string): Promise<AuditEntry[]> {
     return []
   }
 }
+
+export async function blockIp(alertId: string, ip: string): Promise<void> {
+  const resp = await fetch('/api/response/block-ip', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ alert_id: alertId, ip }),
+  })
+  await handleResponse<unknown>(resp)
+}
+
+export async function isolateHost(alertId: string, hostname: string): Promise<void> {
+  const resp = await fetch('/api/response/isolate-host', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ alert_id: alertId, hostname }),
+  })
+  await handleResponse<unknown>(resp)
+}
