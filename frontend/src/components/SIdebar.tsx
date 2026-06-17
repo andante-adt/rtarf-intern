@@ -33,15 +33,15 @@ export default function Sidebar({ alerts, selectedId, statuses, onSelect }: Prop
   }
 
   return (
-    <div className="w-56 h-full bg-[#0d1117] border-r border-[#1e2d3d] flex flex-col overflow-y-auto">
+    <div className="w-56 h-full bg-[#0b0f19] border-r border-[#1e2d3d] flex flex-col overflow-y-auto">
 
       {/* Alert Queue */}
       <div className="p-3">
-        <div className="font-mono text-[11px] text-[#4a6080] tracking-widest uppercase mb-2">
+        <div className="font-mono text-[11px] text-[#4a6080] tracking-widest uppercase mb-2.5">
           Alert Queue
         </div>
 
-        <div className="space-y-0.5">
+        <div className="space-y-1">
           {alerts.map(a => {
             const active  = a.id === selectedId
             const status  = getStatus(a.id)
@@ -55,28 +55,35 @@ export default function Sidebar({ alerts, selectedId, statuses, onSelect }: Prop
                 key={a.id}
                 onClick={() => onSelect(a.id)}
                 className={[
-                  'w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded border transition-colors',
+                  'w-full text-left flex items-start gap-2.5 px-2.5 py-2.5 rounded-lg border transition-all duration-150',
                   active
-                    ? 'bg-[#0d1521] border-[#1e2d3d]'
-                    : 'border-transparent hover:bg-[#111d2c]',
+                    ? 'bg-[#111d2c] border-[#26405c] shadow-[0_0_0_1px_rgba(37,99,235,0.15),0_4px_12px_-4px_rgba(0,0,0,0.4)]'
+                    : 'border-transparent hover:bg-[#0f1623] hover:border-[#1e2d3d]',
                   closed ? 'opacity-40' : '',
                 ].join(' ')}
               >
-                <span
-                  className="inline-block w-2 h-2 rounded-full flex-shrink-0 mt-[5px]"
-                  style={{
-                    background: closed ? '#4a6080' : dot,
-                    boxShadow:  active && !closed ? `0 0 5px ${dot}88` : 'none',
-                  }}
-                />
+                <span className="relative flex-shrink-0 mt-[5px]">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ background: closed ? '#4a6080' : dot }}
+                  />
+                  {active && !closed && (
+                    <span
+                      className="absolute inset-0 rounded-full animate-ping"
+                      style={{ background: dot, opacity: 0.5 }}
+                    />
+                  )}
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className={`text-[13px] font-medium leading-snug ${closed ? 'line-through text-[#4a6080]' : 'text-[#c9d8e8]'}`}>
                     {a.name}
                   </div>
-                  <div className="font-mono text-[11px] text-[#4a6080] mt-0.5 flex items-center gap-1.5">
-                    <span>{a.severity.toUpperCase()} · {time}</span>
+                  <div className="font-mono text-[11px] text-[#4a6080] mt-1 flex items-center gap-1.5">
+                    <span style={{ color: closed ? undefined : dot }}>{a.severity.toUpperCase()}</span>
+                    <span className="text-[#2d3f52]">·</span>
+                    <span>{time}</span>
                     {status !== 'OPEN' && (
-                      <span className={`font-mono text-[10px] px-1 py-px rounded border ${badge.cls}`}>
+                      <span className={`font-mono text-[10px] px-1.5 py-px rounded border ${badge.cls}`}>
                         {badge.label}
                       </span>
                     )}
@@ -93,21 +100,21 @@ export default function Sidebar({ alerts, selectedId, statuses, onSelect }: Prop
 
       {/* Queue Status */}
       <div className="p-3">
-        <div className="font-mono text-[11px] text-[#4a6080] tracking-widest uppercase mb-2">
+        <div className="font-mono text-[11px] text-[#4a6080] tracking-widest uppercase mb-2.5">
           Queue Status
         </div>
-        <div className="font-mono text-[13px] leading-loose">
+        <div className="grid grid-cols-2 gap-1.5">
           {[
-            { label: 'OPEN',    value: counts.open,     color: '#e2e8f0' },
-            { label: 'ACK',     value: counts.acked,    color: '#f59e0b' },
-            { label: 'CLOSED',  value: counts.closed,   color: '#22c55e' },
-            { label: 'CRITICAL',value: counts.Critical,  color: '#ef4444' },
-            { label: 'HIGH',    value: counts.High,      color: '#f59e0b' },
-            { label: 'MEDIUM',  value: counts.Medium,    color: '#60a5fa' },
+            { label: 'OPEN',     value: counts.open,     color: '#e2e8f0' },
+            { label: 'ACK',      value: counts.acked,    color: '#f59e0b' },
+            { label: 'CLOSED',   value: counts.closed,   color: '#22c55e' },
+            { label: 'CRITICAL', value: counts.Critical, color: '#ef4444' },
+            { label: 'HIGH',     value: counts.High,     color: '#f59e0b' },
+            { label: 'MEDIUM',   value: counts.Medium,   color: '#60a5fa' },
           ].map(({ label, value, color }) => (
-            <div key={label} className="flex justify-between text-[#4a6080]">
-              <span>{label}</span>
-              <span style={{ color }}>{value}</span>
+            <div key={label} className="bg-[#080b13] border border-[#1a2433] rounded-md px-2 py-1.5 flex items-center justify-between">
+              <span className="font-mono text-[9.5px] text-[#4a6080] tracking-wide">{label}</span>
+              <span className="font-mono text-[13px] font-semibold" style={{ color }}>{value}</span>
             </div>
           ))}
         </div>

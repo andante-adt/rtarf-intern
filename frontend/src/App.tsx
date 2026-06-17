@@ -112,6 +112,7 @@ export default function App() {
             alert={alert}
             initialStatus={statuses[alert.id] ?? 'OPEN'}
             onStatusChange={handleStatusChange}
+            
           />
         </main>
       </div>
