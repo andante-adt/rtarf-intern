@@ -87,9 +87,27 @@ export async function getAllAlertStatuses(): Promise<Record<string, { status: Al
   }
 }
 
+export async function getAllAlertsFull(): Promise<Record<string, AlertState>> {
+  try {
+    const resp = await fetch('/api/alerts', { headers: authHeaders() })
+    return handleResponse<Record<string, AlertState>>(resp)
+  } catch {
+    return {}
+  }
+}
+
 export async function getAuditLog(alertId: string): Promise<AuditEntry[]> {
   try {
     const resp = await fetch(`/api/alerts/${alertId}/audit`, { headers: authHeaders() })
+    return handleResponse<AuditEntry[]>(resp)
+  } catch {
+    return []
+  }
+}
+
+export async function getAllAuditLog(): Promise<AuditEntry[]> {
+  try {
+    const resp = await fetch('/api/audit', { headers: authHeaders() })
     return handleResponse<AuditEntry[]>(resp)
   } catch {
     return []

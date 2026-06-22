@@ -3,8 +3,11 @@ import { MOCK_ALERTS } from './mockAlerts'
 import Sidebar from './components/Sidebar'
 import AlertDetail from './components/AlertDetail'
 import LoginPage from './components/LoginPage'
+import Dashboard from './components/Dashboard'
 import type { AlertStatus } from './types'
 import { getAllAlertStatuses, isAuthenticated, clearToken } from './api'
+
+type View = 'dashboard' | 'alerts'
 
 function getICTTime(): string {
   return new Date().toLocaleString('sv-SE', {
@@ -15,6 +18,7 @@ function getICTTime(): string {
 
 export default function App() {
   const [authed,      setAuthed]      = useState(isAuthenticated())
+  const [view,        setView]        = useState<View>('dashboard')
   const [selectedId,  setSelectedId]  = useState<string>(MOCK_ALERTS[0].id)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [clock,       setClock]       = useState(getICTTime())
@@ -40,6 +44,11 @@ export default function App() {
     setStatuses(prev => ({ ...prev, [id]: status }))
   }, [])
 
+  function handleSelectAlert(id: string) {
+    setSelectedId(id)
+    setView('alerts')
+  }
+
   function handleLogout() {
     clearToken()
     setAuthed(false)
@@ -62,7 +71,7 @@ export default function App() {
           alerts={MOCK_ALERTS}
           selectedId={selectedId}
           statuses={statuses}
-          onSelect={setSelectedId}
+          onSelect={handleSelectAlert}
         />
       </div>
 
@@ -88,6 +97,25 @@ export default function App() {
                 Blue Team Unit · Cyber Protection
               </div>
             </div>
+            <nav className="flex items-center gap-1 ml-2 bg-[#0e1521] border border-[#1a2433] rounded-lg p-1">
+              {([
+                { key: 'dashboard', label: 'OVERVIEW' },
+                { key: 'alerts',    label: 'ALERTS' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setView(key)}
+                  className={[
+                    'font-mono text-[11px] tracking-widest px-3.5 py-1.5 rounded-md transition-all duration-150',
+                    view === key
+                      ? 'bg-[#1e3a5f] text-[#e2e8f0] shadow-[0_0_12px_rgba(37,99,235,0.25)]'
+                      : 'text-[#4a6080] hover:text-[#94a3b8]',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
           </div>
           <div className="font-mono text-[13px] text-[#4a6080] flex items-center gap-4">
             <span className="flex items-center gap-2">
@@ -107,12 +135,16 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-y-auto px-7 py-5">
-          <AlertDetail
-            key={alert.id}
-            alert={alert}
-            initialStatus={statuses[alert.id] ?? 'OPEN'}
-            onStatusChange={handleStatusChange}
-          />
+          {view === 'dashboard' ? (
+            <Dashboard />
+          ) : (
+            <AlertDetail
+              key={alert.id}
+              alert={alert}
+              initialStatus={statuses[alert.id] ?? 'OPEN'}
+              onStatusChange={handleStatusChange}
+            />
+          )}
         </main>
       </div>
     </div>

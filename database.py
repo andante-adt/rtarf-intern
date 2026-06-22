@@ -129,6 +129,14 @@ def get_audit_log(alert_id: str) -> list:
         return [dict(row) for row in rows]
 
 
+def get_all_audit_log() -> list:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM audit_log ORDER BY timestamp ASC",
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def migrate_from_json(json_file: Path = Path("alert_store.json")):
     if not json_file.exists():
         print(f"[DB] {json_file} not found — skipping migration")

@@ -64,6 +64,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
 
   const refreshAudit = () => getAuditLog(alert.id).then(setAuditLog)
 
+  // โหลด cached analysis เมื่อ switch alert
   useEffect(() => {
     setStatus(initialStatus)
     setResult(null)
@@ -107,7 +108,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
     setRespLoading(action)
     setConfirmTarget(null)
     try {
-      if (action === 'block-ip')       await blockIp(alert.id, value)
+      if (action === 'block-ip')          await blockIp(alert.id, value)
       else if (action === 'isolate-host') await isolateHost(alert.id, value)
       await refreshAudit()
     } catch (e) {
@@ -120,44 +121,57 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
   const badgeCls    = SEV_BADGE_CLS[alert.severity] ?? 'text-slate-400 bg-slate-400/10 border-slate-400/30'
   const borderColor = SEV_BORDER[alert.severity] ?? '#f59e0b'
   const isTP        = result?.verdict.toLowerCase().includes('true positive') ?? false
+  const ipBlocked    = auditLog.some(e => e.action === 'BLOCK_IP')
+  const hostIsolated = auditLog.some(e => e.action === 'ISOLATE_HOST')
 
   return (
     <div>
       {/* Section label */}
-      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2">
+      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2.5 flex items-center gap-2">
+        <span className="w-1 h-1 rounded-full bg-[#4a6080]" />
         Incoming Alert
       </div>
 
       {/* Alert card */}
       <div
-        className="bg-[#0d1521] border border-[#1e2d3d] rounded-md px-5 py-4 mb-4 border-l-4"
-        style={{ borderLeftColor: borderColor }}
+        className="bg-gradient-to-b from-[#0e1521] to-[#0d1521] border border-[#1e2d3d] rounded-xl px-5 py-4 mb-5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.5)]"
+        style={{ borderLeft: `3px solid ${borderColor}` }}
       >
-        <div className="text-[17px] font-semibold text-[#e2e8f0] mb-1">{alert.name}</div>
-        <div className="font-mono text-[13px] text-[#4a6080] mb-2">
-          {alert.observation_date} &nbsp;·&nbsp; {alert.issue_domain} &nbsp;·&nbsp; {alert.detection_method}
+        <div className="text-[18px] font-semibold text-[#e9eef5] mb-1.5 leading-snug">{alert.name}</div>
+        <div className="font-mono text-[12.5px] text-[#5b7494] mb-3 flex items-center gap-1.5 flex-wrap">
+          <span>{alert.observation_date}</span>
+          <span className="text-[#2d3f52]">·</span>
+          <span>{alert.issue_domain}</span>
+          <span className="text-[#2d3f52]">·</span>
+          <span>{alert.detection_method}</span>
         </div>
-        <div className="flex flex-wrap gap-2 mb-3">
-          <span className={`font-mono text-[12px] px-2 py-0.5 rounded border ${badgeCls}`}>
+        <div className="flex flex-wrap gap-2 mb-3.5">
+          <span className={`font-mono text-[11.5px] px-2.5 py-1 rounded-md border font-medium ${badgeCls}`}>
             {alert.severity}
           </span>
-          <span className={`font-mono text-[12px] px-2 py-0.5 rounded border ${STATUS_CLS[status]}`}>
+          <span className={`font-mono text-[11.5px] px-2.5 py-1 rounded-md border ${STATUS_CLS[status]}`}>
             {status}
           </span>
-          <span className="font-mono text-[12px] px-2 py-0.5 rounded border text-slate-400 bg-slate-400/10 border-slate-400/20">
+          <span className="font-mono text-[11.5px] px-2.5 py-1 rounded-md border text-slate-400 bg-slate-400/10 border-slate-400/20">
             {alert.category}
           </span>
         </div>
-        <div className="text-[14px] text-[#8898aa] leading-relaxed">{alert.description}</div>
+        <div className="text-[14px] text-[#9aabc0] leading-relaxed">{alert.description}</div>
       </div>
 
       {/* Action row */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-5">
         <button
           onClick={handleAnalyze}
           disabled={loading || status === 'CLOSED'}
-          className="font-mono text-[13px] tracking-wider bg-teal-700 hover:bg-teal-800 active:bg-teal-900 disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded transition-colors"
+          className="font-mono text-[13px] tracking-wider bg-teal-700 hover:bg-teal-600 active:bg-teal-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg transition-all duration-150 shadow-[0_4px_14px_-4px_rgba(13,148,136,0.5)] hover:shadow-[0_6px_18px_-4px_rgba(13,148,136,0.65)] active:scale-[0.97] flex items-center gap-2"
         >
+          {loading && (
+            <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeOpacity="0.3"/>
+              <path d="M21 12a9 9 0 0 0-9-9" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+            </svg>
+          )}
           {loading ? 'ANALYZING…' : result ? 'RE-ANALYZE' : 'RUN ANALYSIS'}
         </button>
 
@@ -165,7 +179,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
           <button
             onClick={() => handleAction('ACKNOWLEDGED')}
             disabled={actLoading}
-            className="font-mono text-[13px] tracking-wider border border-amber-500/50 text-amber-400 hover:bg-amber-400/10 disabled:opacity-40 px-5 py-2.5 rounded transition-colors"
+            className="font-mono text-[13px] tracking-wider border border-amber-500/40 text-amber-400 hover:bg-amber-400/10 hover:border-amber-500/60 disabled:opacity-40 px-5 py-2.5 rounded-lg transition-all duration-150"
           >
             {actLoading ? '…' : 'ACKNOWLEDGE'}
           </button>
@@ -175,7 +189,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
           <button
             onClick={() => handleAction('CLOSED')}
             disabled={actLoading}
-            className="font-mono text-[13px] tracking-wider border border-green-500/50 text-green-400 hover:bg-green-400/10 disabled:opacity-40 px-5 py-2.5 rounded transition-colors"
+            className="font-mono text-[13px] tracking-wider border border-green-500/40 text-green-400 hover:bg-green-400/10 hover:border-green-500/60 disabled:opacity-40 px-5 py-2.5 rounded-lg transition-all duration-150"
           >
             {actLoading ? '…' : 'CLOSE ALERT'}
           </button>
@@ -185,18 +199,33 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
           <button
             onClick={() => handleAction('OPEN')}
             disabled={actLoading}
-            className="font-mono text-[13px] tracking-wider border border-slate-500/50 text-slate-400 hover:bg-slate-400/10 disabled:opacity-40 px-5 py-2.5 rounded transition-colors"
+            className="font-mono text-[13px] tracking-wider border border-slate-500/40 text-slate-400 hover:bg-slate-400/10 hover:border-slate-500/60 disabled:opacity-40 px-5 py-2.5 rounded-lg transition-all duration-150"
           >
             {actLoading ? '…' : 'REOPEN'}
           </button>
         )}
       </div>
 
-      <div className="border-t border-[#1e2d3d] my-4" />
+      {loading && !result && (
+        <div className="mb-5 space-y-3">
+          <div className="h-3 w-32 bg-[#15202e] rounded animate-pulse" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="h-28 bg-[#0d1521] border border-[#1e2d3d] rounded-xl animate-pulse" />
+            <div className="h-28 bg-[#0d1521] border border-[#1e2d3d] rounded-xl animate-pulse" />
+          </div>
+        </div>
+      )}
 
       {error && (
-        <div className="bg-red-500/5 border border-[#1e2d3d] border-l-4 border-l-red-500 rounded-md px-5 py-3 text-[14px] text-red-400 mb-4">
-          ERROR: {error}
+        <div className="bg-red-500/[0.06] border border-[#2a1f24] border-l-[3px] border-l-red-500 rounded-xl px-5 py-3.5 mb-5 flex items-start gap-3">
+          <svg className="flex-shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="#f87171" strokeWidth="1.5"/>
+            <path d="M12 8v5M12 16h.01" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <div>
+            <div className="text-[13px] text-red-400 font-medium mb-0.5">วิเคราะห์ไม่สำเร็จ</div>
+            <div className="text-[12.5px] text-red-400/70 font-mono">{error}</div>
+          </div>
         </div>
       )}
 
@@ -205,35 +234,39 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
       {/* ── Active Response ── */}
       {result && isTP && (alert.source_ip || alert.hostname) && (
         <>
-          <div className="border-t border-[#1e2d3d] my-4" />
-          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-3">
+          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mt-6 mb-2.5 flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-red-400" />
             Active Response
           </div>
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-md px-4 py-2 mb-3 flex items-center gap-2">
-            <span className="text-amber-400 font-mono text-[11px] tracking-wider">⚠ STUB MODE</span>
-            <span className="text-amber-400/60 font-mono text-[11px]">— บันทึก audit log แต่ยังไม่ส่งคำสั่งจริงไปยัง Palo Alto</span>
+          <div className="font-mono text-[11px] text-amber-400/80 bg-amber-400/[0.06] border border-amber-400/20 rounded-md px-3 py-1.5 mb-3.5 inline-block">
+            ⚠ STUB MODE — บันทึก audit log แต่ยังไม่ส่งคำสั่งจริงไปยัง Palo Alto
           </div>
-          <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-md overflow-hidden">
+          <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-xl px-5 py-1 mb-3">
 
             {alert.source_ip && (
-              <div className="flex items-center justify-between px-5 py-3">
+              <div className="flex items-center justify-between py-2.5">
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[11px] text-[#4a6080] uppercase tracking-wider w-20">Source IP</span>
-                  <span className="font-mono text-[13px] text-[#e2e8f0]">{alert.source_ip}</span>
+                  <span className="font-mono text-[10.5px] text-[#4a6080] uppercase tracking-widest w-20">Source IP</span>
+                  <span className="font-mono text-[13.5px] text-[#c9d8e8]">{alert.source_ip}</span>
                 </div>
-                {confirmTarget?.action === 'block-ip' ? (
+                {ipBlocked ? (
+                  <span className="font-mono text-[11px] tracking-wider text-green-400 bg-green-400/10 border border-green-400/30 px-4 py-2 rounded-lg flex items-center gap-1.5">
+                    ✓ BLOCKED
+                  </span>
+                ) : confirmTarget?.action === 'block-ip' ? (
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[11px] text-amber-400">ยืนยัน?</span>
                     <button
                       onClick={() => handleResponseAction('block-ip', alert.source_ip!)}
                       disabled={!!respLoading}
-                      className="font-mono text-[11px] px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 transition-colors"
+                      className="font-mono text-[11px] px-3.5 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-white disabled:opacity-40 transition-all duration-150"
                     >
-                      {respLoading === 'block-ip' ? '...' : 'ยืนยัน'}
+                      {respLoading === 'block-ip' ? '…' : 'ยืนยัน'}
                     </button>
                     <button
                       onClick={() => setConfirmTarget(null)}
-                      className="font-mono text-[11px] px-3 py-1 rounded border border-[#1e2d3d] text-[#4a6080] hover:text-[#c9d8e8] transition-colors"
+                      disabled={!!respLoading}
+                      className="font-mono text-[11px] px-3.5 py-1.5 rounded-lg border border-[#2d3f52] text-[#5b7494] hover:bg-[#161f2c] disabled:opacity-40 transition-all duration-150"
                     >
                       ยกเลิก
                     </button>
@@ -242,7 +275,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
                   <button
                     onClick={() => setConfirmTarget({ action: 'block-ip', value: alert.source_ip! })}
                     disabled={!!respLoading}
-                    className="font-mono text-[11px] tracking-wider border border-red-500/40 text-red-400 hover:bg-red-400/10 disabled:opacity-40 px-4 py-1.5 rounded transition-colors"
+                    className="font-mono text-[12px] tracking-wider border border-red-500/40 text-red-400 hover:bg-red-400/10 hover:border-red-500/60 disabled:opacity-40 px-4 py-2 rounded-lg transition-all duration-150"
                   >
                     BLOCK IP
                   </button>
@@ -251,28 +284,33 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
             )}
 
             {alert.source_ip && alert.hostname && (
-              <div className="border-t border-[#111d2c]" />
+              <div className="border-t border-[#161f2c]" />
             )}
 
             {alert.hostname && (
-              <div className="flex items-center justify-between px-5 py-3">
+              <div className="flex items-center justify-between py-2.5">
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[11px] text-[#4a6080] uppercase tracking-wider w-20">Hostname</span>
-                  <span className="font-mono text-[13px] text-[#e2e8f0]">{alert.hostname}</span>
+                  <span className="font-mono text-[10.5px] text-[#4a6080] uppercase tracking-widest w-20">Hostname</span>
+                  <span className="font-mono text-[13.5px] text-[#c9d8e8]">{alert.hostname}</span>
                 </div>
-                {confirmTarget?.action === 'isolate-host' ? (
+                {hostIsolated ? (
+                  <span className="font-mono text-[11px] tracking-wider text-green-400 bg-green-400/10 border border-green-400/30 px-4 py-2 rounded-lg flex items-center gap-1.5">
+                    ✓ ISOLATED
+                  </span>
+                ) : confirmTarget?.action === 'isolate-host' ? (
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[11px] text-amber-400">ยืนยัน?</span>
                     <button
                       onClick={() => handleResponseAction('isolate-host', alert.hostname!)}
                       disabled={!!respLoading}
-                      className="font-mono text-[11px] px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 transition-colors"
+                      className="font-mono text-[11px] px-3.5 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-white disabled:opacity-40 transition-all duration-150"
                     >
-                      {respLoading === 'isolate-host' ? '...' : 'ยืนยัน'}
+                      {respLoading === 'isolate-host' ? '…' : 'ยืนยัน'}
                     </button>
                     <button
                       onClick={() => setConfirmTarget(null)}
-                      className="font-mono text-[11px] px-3 py-1 rounded border border-[#1e2d3d] text-[#4a6080] hover:text-[#c9d8e8] transition-colors"
+                      disabled={!!respLoading}
+                      className="font-mono text-[11px] px-3.5 py-1.5 rounded-lg border border-[#2d3f52] text-[#5b7494] hover:bg-[#161f2c] disabled:opacity-40 transition-all duration-150"
                     >
                       ยกเลิก
                     </button>
@@ -281,7 +319,7 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
                   <button
                     onClick={() => setConfirmTarget({ action: 'isolate-host', value: alert.hostname! })}
                     disabled={!!respLoading}
-                    className="font-mono text-[11px] tracking-wider border border-orange-500/40 text-orange-400 hover:bg-orange-400/10 disabled:opacity-40 px-4 py-1.5 rounded transition-colors"
+                    className="font-mono text-[12px] tracking-wider border border-orange-500/40 text-orange-400 hover:bg-orange-400/10 hover:border-orange-500/60 disabled:opacity-40 px-4 py-2 rounded-lg transition-all duration-150"
                   >
                     ISOLATE HOST
                   </button>
@@ -296,14 +334,16 @@ export default function AlertDetail({ alert, initialStatus, onStatusChange }: Pr
       {/* Audit Log */}
       {auditLog.length > 0 && (
         <>
-          <div className="border-t border-[#1e2d3d] my-4" />
-          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-3">
+          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mt-6 mb-2.5 flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-[#4a6080]" />
             Audit Log
           </div>
-          <div className="flex flex-col gap-0">
-            {[...auditLog].reverse().map((entry, i) => (
-              <AuditRow key={entry.id} entry={entry} isLast={i === auditLog.length - 1} />
-            ))}
+          <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-xl px-5 py-4">
+            <div className="flex flex-col gap-0">
+              {[...auditLog].reverse().map((entry, i) => (
+                <AuditRow key={entry.id} entry={entry} isLast={i === auditLog.length - 1} />
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -372,13 +412,14 @@ function AnalysisResults({ result }: { result: AnalysisResult }) {
 
   return (
     <>
-      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2">
+      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2.5 flex items-center gap-2">
+        <span className="w-1 h-1 rounded-full bg-teal-500" />
         Triage Result
       </div>
       <div className="grid grid-cols-2 gap-3 mb-3">
-        <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-md px-5 py-4">
-          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2">Verdict</div>
-          <span className={`font-mono text-[12px] px-2 py-0.5 rounded border inline-block mb-2 ${
+        <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-xl px-5 py-4 hover:border-[#26405c] transition-colors">
+          <div className="font-mono text-[11px] text-[#4a6080] tracking-widest uppercase mb-2.5">Verdict</div>
+          <span className={`font-mono text-[12px] px-2.5 py-1 rounded-md border inline-block mb-2.5 font-medium ${
             isTP
               ? 'text-red-400 bg-red-400/10 border-red-400/30'
               : 'text-green-400 bg-green-400/10 border-green-400/30'
@@ -388,37 +429,40 @@ function AnalysisResults({ result }: { result: AnalysisResult }) {
           <div className="text-[14px] text-[#c9d8e8] leading-relaxed">{result.reason}</div>
         </div>
 
-        <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-md px-5 py-4">
-          <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2">MITRE ATT&amp;CK</div>
-          <span className="font-mono text-[12px] px-2 py-0.5 rounded border inline-block mb-2 text-violet-400 bg-violet-400/10 border-violet-400/30">
+        <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-xl px-5 py-4 hover:border-[#26405c] transition-colors">
+          <div className="font-mono text-[11px] text-[#4a6080] tracking-widest uppercase mb-2.5">MITRE ATT&amp;CK</div>
+          <span className="font-mono text-[12px] px-2.5 py-1 rounded-md border inline-block mb-2.5 font-medium text-violet-400 bg-violet-400/10 border-violet-400/30">
             {tactic} / {technique}
           </span>
           <div className="text-[14px] text-[#c9d8e8] leading-relaxed">{result.summary}</div>
         </div>
       </div>
 
-      <div className="border-t border-[#1e2d3d] my-4" />
-      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2">
+      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mt-6 mb-2.5 flex items-center gap-2">
+        <span className="w-1 h-1 rounded-full bg-violet-400" />
         Playbook — CPT Handbook
       </div>
-      <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-md px-5 py-1 mb-3">
+      <div className="bg-[#0d1521] border border-[#1e2d3d] rounded-xl px-5 py-1 mb-3">
         {steps.map((step, i) => (
-          <div key={i} className={`flex gap-4 items-start py-2.5 ${i > 0 ? 'border-t border-[#111d2c]' : ''}`}>
-            <span className="font-mono text-[12px] text-[#4a6080] w-6 shrink-0 pt-0.5">
+          <div key={i} className={`flex gap-4 items-start py-3 ${i > 0 ? 'border-t border-[#161f2c]' : ''}`}>
+            <span className="font-mono text-[11px] text-[#4a6080] bg-[#161f2c] w-6 h-6 rounded-md flex items-center justify-center shrink-0 mt-0.5">
               {String(i + 1).padStart(2, '0')}
             </span>
-            <span className="text-[14px] text-[#c9d8e8] leading-relaxed">{step}</span>
+            <span className="text-[14px] text-[#c9d8e8] leading-relaxed pt-0.5">{step}</span>
           </div>
         ))}
       </div>
 
-      <div className="border-t border-[#1e2d3d] my-4" />
-      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mb-2">
+      <div className="font-mono text-[12px] text-[#4a6080] tracking-widest uppercase mt-6 mb-2.5 flex items-center gap-2">
+        <span className="w-1 h-1 rounded-full bg-teal-400" />
         Recommended Action
       </div>
-      <div className="bg-teal-900/10 border border-teal-700/30 border-l-4 border-l-teal-600 rounded-md px-5 py-4 text-[14px] text-teal-300 leading-loose">
+      <div className="bg-gradient-to-b from-teal-900/[0.12] to-teal-900/[0.04] border border-teal-700/25 rounded-xl px-5 py-4 text-[14px] text-teal-300 leading-loose">
         {actions.map((a, i) => (
-          <div key={i}>→ {a}</div>
+          <div key={i} className="flex gap-2.5">
+            <span className="text-teal-500 flex-shrink-0">→</span>
+            <span>{a}</span>
+          </div>
         ))}
       </div>
     </>

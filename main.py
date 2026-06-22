@@ -264,6 +264,10 @@ def get_alert_analysis(alert_id: str, current_user: str = Depends(get_current_us
 def get_alert_audit(alert_id: str, current_user: str = Depends(get_current_user)):
     return db.get_audit_log(alert_id)
 
+@app.get("/audit")
+def get_audit_all(current_user: str = Depends(get_current_user)):
+    return db.get_all_audit_log()
+
 @app.post("/alerts/{alert_id}/status")
 def update_alert_status(alert_id: str, body: StatusUpdate, current_user: str = Depends(get_current_user)):
     valid = {"OPEN", "ACKNOWLEDGED", "CLOSED"}
