@@ -6,8 +6,9 @@ import LoginPage from './components/LoginPage'
 import Dashboard from './components/Dashboard'
 import type { AlertStatus } from './types'
 import { getAllAlertStatuses, isAuthenticated, clearToken } from './api'
+import IncidentView from './components/IncidentView'
 
-type View = 'dashboard' | 'alerts'
+type View = 'dashboard' | 'alerts' | 'incidents' 
 
 function getICTTime(): string {
   return new Date().toLocaleString('sv-SE', {
@@ -101,6 +102,7 @@ export default function App() {
               {([
                 { key: 'dashboard', label: 'OVERVIEW' },
                 { key: 'alerts',    label: 'ALERTS' },
+                { key: 'incidents', label: 'INCIDENTS' },
               ] as const).map(({ key, label }) => (
                 <button
                   key={key}
@@ -137,14 +139,16 @@ export default function App() {
         <main className="flex-1 overflow-y-auto px-7 py-5">
           {view === 'dashboard' ? (
             <Dashboard />
-          ) : (
-            <AlertDetail
-              key={alert.id}
-              alert={alert}
-              initialStatus={statuses[alert.id] ?? 'OPEN'}
-              onStatusChange={handleStatusChange}
-            />
-          )}
+          ) : view === 'incidents' ? (
+          <IncidentView onSelectAlert={handleSelectAlert} />
+        ) : (
+        <AlertDetail
+        key={alert.id}
+        alert={alert}
+        initialStatus={statuses[alert.id] ?? 'OPEN'}
+        onStatusChange={handleStatusChange}
+        />
+        )}
         </main>
       </div>
     </div>

@@ -39,3 +39,15 @@ export interface AuditEntry {
   detail: string
   timestamp: string
 }
+
+export interface Incident {
+  incident_id: string
+  alert_ids: string[]
+  alert_count: number
+  shared_source_ips: string[]
+  shared_mitre_techniques: string[]
+  max_severity: 'Critical' | 'High' | 'Medium' | 'Low'
+  status: AlertStatus
+  earliest_observed: string
+  alerts: Alert[]
+}

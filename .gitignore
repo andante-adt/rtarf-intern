@@ -7,3 +7,4 @@ node_modules/
 dist/
 venv/
 frontend/src/components/Sidebar_tmp.tsx
+rtarf_soc.db

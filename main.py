@@ -16,6 +16,9 @@ import pytz
 import database as db
 from auth import authenticate_user, create_access_token, get_current_user
 
+from incident_correlation import build_incidents
+from mock_alerts import MOCK_ALERTS
+
 logger = logging.getLogger("rtarf-soc")
 
 # ── Scheduler setup ──────────────────────────────────────────────
@@ -267,6 +270,11 @@ def get_alert_audit(alert_id: str, current_user: str = Depends(get_current_user)
 @app.get("/audit")
 def get_audit_all(current_user: str = Depends(get_current_user)):
     return db.get_all_audit_log()
+
+@app.get("/incidents")
+def get_incidents(current_user: str = Depends(get_current_user)):
+    analyses = db.get_all_alerts()
+    return build_incidents(MOCK_ALERTS, analyses)
 
 @app.post("/alerts/{alert_id}/status")
 def update_alert_status(alert_id: str, body: StatusUpdate, current_user: str = Depends(get_current_user)):

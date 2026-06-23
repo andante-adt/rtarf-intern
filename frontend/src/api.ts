@@ -1,4 +1,4 @@
-import type { Alert, AnalysisResult, AlertStatus, AlertState, AuditEntry } from './types'
+import type { Alert, AnalysisResult, AlertStatus, AlertState, AuditEntry, Incident } from './types'
 
 // ── Token management ──────────────────────────────────────────────
 const TOKEN_KEY = 'soc_token'
@@ -109,6 +109,15 @@ export async function getAllAuditLog(): Promise<AuditEntry[]> {
   try {
     const resp = await fetch('/api/audit', { headers: authHeaders() })
     return handleResponse<AuditEntry[]>(resp)
+  } catch {
+    return []
+  }
+}
+
+export async function getIncidents(): Promise<Incident[]> {
+  try {
+    const resp = await fetch('/api/incidents', { headers: authHeaders() })
+    return handleResponse<Incident[]>(resp)
   } catch {
     return []
   }
